@@ -1,0 +1,186 @@
+.landingpagecontainer {
+  width: 100vw;
+  height: 100vh;
+  /* Reminder: Remove /public/ from the URL if the image doesn't show */
+background: url("../public/background.png");
+  background-repeat: no-repeat;
+  background-size: cover;
+  color: white;
+}
+
+/* This targets the <nav> we just added in React */
+.landingpagecontainer nav {
+    display: flex; 
+    justify-content: space-between; /* Pushes Logo to Left, List to Right */
+    align-items: center;            /* Centers them vertically on the same line */
+    padding: 1.6rem 3rem;           /* Adds space from the edges */
+}
+
+/* This ensures the list items stay in a row */
+.navlist {
+    display: flex; 
+    gap: 2rem; 
+    align-items: center;
+}
+
+.navlist p {
+    cursor: pointer;
+    margin: 0; /* Removes default p-tag spacing */
+}
+
+.landingpagecontainer nav .navlist{
+  display: flex;
+  cursor: pointer;
+}
+
+/* This code only runs on screens smaller than 768px (Phones) */
+@media (max-width: 768px) {
+    .landingpagecontainer nav {
+        flex-direction: column; /* Stacks Logo on top of Links */
+        gap: 1rem;              /* Adds space between them */
+        padding: 1rem;          /* Reduces padding so it fits better */
+        text-align: center;
+    }
+
+    .navlist {
+        gap: 1rem;              /* Brings links closer together */
+        font-size: 0.9rem;      /* Makes text a bit smaller to fit */
+    }
+
+    .navHeader h2 {
+        font-size: 1.5rem;      /* Shrinks the title slightly */
+    }
+}
+
+
+.landingmaincontainer{
+  display: flex;
+  justify-content: space-between;
+  padding-inline: 3rem;
+  height: auto;
+  align-items: center;
+  padding-bottom: 4rem;
+}
+
+.landingmaincontainer> div:nth-child(2) img{
+  height: 70vh;
+  width: auto;
+  
+}
+
+.landingmaincontainer > div:nth-child(1){
+ font-size: 1.2rem;
+ margin-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+    .landingmaincontainer {
+        flex-direction: column; /* Stacks text on top, image on bottom */
+        height: auto;           /* Let the container grow with content */
+        padding-inline: 1.5rem;
+        padding-top: 2rem;
+        text-align: center;
+    }
+  }
+  .landingmaincontainer h1 {
+        font-size: 2.5rem;      /* Specifically targets the H1 */
+    }
+
+ /* This styles the orange box */
+.hero-btn {
+    background-color: #D97500 !important;
+    width: fit-content;
+    padding: 12px 24px; /* Proper button padding */
+    border-radius: 8px;
+    margin-top: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* This styles the text INSIDE the box */
+.hero-btn a {
+    color: white !important;
+    text-decoration: none !important; /* Removes the purple underline */
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: block;
+    width: 100%;
+}
+
+.hero-btn:hover {
+    background-color: #ff8c00 !important;
+    transform: translateY(-2px); /* Makes it feel like a real button */
+    transition: 0.2s;
+}
+
+/* MOBILE FIX for the button */
+@media (max-width: 768px) {
+    .hero-btn {
+        margin: 20px auto 0 auto; /* Centers the button on mobile */
+    }
+}
+
+
+.navBar{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 20px;
+    align-items: center;
+}
+/* Prevent the whole page from scrolling horizontally */
+body, html {
+    overflow-x: hidden;
+    margin: 0;
+    padding: 0;
+}
+
+.meetContainer {
+    display: flex;
+    flex-direction: row; /* Horizontal on laptop */
+    align-items: center;
+    justify-content: space-around;
+    width: 100%;
+    max-width: 100vw; 
+    min-height: 80vh; /* Keeps content vertically centered */
+    box-sizing: border-box;
+    padding: 0 5%;
+}
+
+.leftPanel {
+    flex: 1;
+    padding: 20px;
+}
+
+.rightPanel {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 50%; /* Limits the panel to half the screen */
+}
+
+.rightPanel img {
+    /* This ensures the image never gets too tall or too wide */
+    max-width: 100%; 
+    max-height: 400px; /* Adjust this to make the pic smaller on laptop */
+    width: auto;       /* Keeps aspect ratio */
+    height: auto;
+    object-fit: contain;
+}
+
+/* Mobile Responsive adjustment */
+@media (max-width: 768px) {
+    .meetContainer {
+        flex-direction: column; /* Stacks vertically on mobile */
+        padding: 20px;
+    }
+    .rightPanel {
+        max-width: 100%;
+    }
+    .rightPanel img {
+        max-height: 1000px; /* Smaller image for mobile phones */
+    }
+}

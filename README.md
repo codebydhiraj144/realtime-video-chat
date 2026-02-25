@@ -37,7 +37,7 @@ This platform enables users to join virtual rooms and communicate via high-defin
 
 | Layer | Technology |
 | :--- | :--- |
-| **Frontend** | React.js, Tailwind CSS |
+| **Frontend** | React.js, Css |
 | **Backend** | Node.js, Express.js |
 | **Real-time** | Socket.io, WebSockets |
 | **P2P Streaming** | WebRTC API |

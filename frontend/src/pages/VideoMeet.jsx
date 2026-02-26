@@ -11,7 +11,6 @@ import ChatIcon from '@mui/icons-material/Chat';
 import SendIcon from '@mui/icons-material/Send';
 import CloseIcon from '@mui/icons-material/Close';
 import ShareIcon from '@mui/icons-material/Share'; 
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import io from 'socket.io-client';
 import { useNavigate, useParams } from 'react-router-dom';
 import "../styles/videoComponent.css";
@@ -20,14 +19,17 @@ const server_url = "https://video-chat-backend-l1qi.onrender.com";
 
 const peerConfig = { 
     "iceServers": [
-        { 
-            "urls": [
-                "stun:stun.l.google.com:19302",
-                "stun:stun1.l.google.com:19302",
-                "stun:stun2.l.google.com:19302",
-                "stun:stun3.l.google.com:19302",
-                "stun:stun4.l.google.com:19302"
-            ] 
+        { "urls": "stun:stun.l.google.com:19302" },
+        { "urls": "stun:stun1.l.google.com:19302" },
+        {
+            "urls": "turn:openrelay.metered.ca:80",
+            "username": "openrelayproject",
+            "password": "openrelayproject"
+        },
+        {
+            "urls": "turn:openrelay.metered.ca:443",
+            "username": "openrelayproject",
+            "password": "openrelayproject"
         }
     ] 
 };
@@ -41,12 +43,12 @@ export default function VideoMeetComponent() {
     const localVideoRef = useRef();
     const messagesEndRef = useRef(null);
     const screenStreamRef = useRef(null);
-    
     const connections = useRef({}); 
     
-    const [username, setUsername] = useState(""); 
+    // Check if a username exists in storage to decide whether to show the lobby
+    const [username, setUsername] = useState(localStorage.getItem('vc-username') || ""); 
     const [videos, setVideos] = useState([]);
-    const [askForUsername, setAskForUsername] = useState(true);
+    const [askForUsername, setAskForUsername] = useState(!localStorage.getItem('vc-username'));
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [screenSharing, setScreenSharing] = useState(false);
@@ -62,6 +64,21 @@ export default function VideoMeetComponent() {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // AUTO-REJOIN LOGIC: If we have a username and room URL, join immediately on refresh
+    useEffect(() => {
+        if (localStorage.getItem('vc-username') && url) {
+            getMedia();
+        }
+
+        return () => {
+            // Cleanup on tab close/refresh
+            if (window.localStream) {
+                window.localStream.getTracks().forEach(track => track.stop());
+            }
+            if (socketRef.current) socketRef.current.disconnect();
+        };
+    }, []);
 
     const handleVideoToggle = () => {
         if (window.localStream) {
@@ -84,6 +101,9 @@ export default function VideoMeetComponent() {
     };
 
     const handleEndCall = () => {
+        // CLEAR SESSION ONLY HERE
+        localStorage.removeItem('vc-username');
+        
         if (window.localStream) {
             window.localStream.getTracks().forEach(track => track.stop());
         }
@@ -104,13 +124,22 @@ export default function VideoMeetComponent() {
     };
 
     const getMedia = async () => {
+        // Save username to storage before joining
+        if (username) {
+            localStorage.setItem('vc-username', username);
+        }
         setAskForUsername(false);
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             window.localStream = stream;
             if (localVideoRef.current) localVideoRef.current.srcObject = stream;
             connectToSocketServer();
-        } catch (err) { console.error("Media Error:", err); }
+        } catch (err) { 
+            console.error("Media Error:", err);
+            // If media fails (e.g. user denied permission), clear storage so they can try again
+            localStorage.removeItem('vc-username');
+            setAskForUsername(true);
+        }
     };
 
     const connectToSocketServer = () => {
@@ -121,14 +150,12 @@ export default function VideoMeetComponent() {
             socketRef.current.emit("join-call", url, username);
 
             socketRef.current.on("user-joined", (id, clients) => {
-                // Initialize a peer connection for EVERY client in the room
                 clients.forEach((client) => {
                     if (!connections.current[client.socketId] && client.socketId !== socketIdRef.current) {
                         initializePeer(client.socketId, client.name);
                     }
                 });
 
-                // Logic for Mesh Network: The newly joined user initiates the offer to all existing peers
                 if (id === socketIdRef.current) {
                     Object.keys(connections.current).forEach(remoteId => {
                         connections.current[remoteId].createOffer().then(desc => {
@@ -183,7 +210,6 @@ export default function VideoMeetComponent() {
 
         connections.current[id].ontrack = (event) => {
             setVideos(vids => {
-                // Check if this user's video box already exists to avoid duplicates
                 const alreadyExists = vids.some(v => v.socketId === id);
                 if (alreadyExists) {
                     return vids.map(v => v.socketId === id ? { ...v, stream: event.streams[0] } : v);

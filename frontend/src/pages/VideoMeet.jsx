@@ -16,7 +16,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import "../styles/videoComponent.css";
 
 const server_url = "https://video-chat-backend-l1qi.onrender.com";
-
 const peerConfig = { 
     "iceServers": [
         { "urls": "stun:stun.l.google.com:19302" },
@@ -24,12 +23,17 @@ const peerConfig = {
         {
             "urls": "turn:openrelay.metered.ca:80",
             "username": "openrelayproject",
-            "password": "openrelayproject"
+            "credential": "openrelayproject"
         },
         {
             "urls": "turn:openrelay.metered.ca:443",
             "username": "openrelayproject",
-            "password": "openrelayproject"
+            "credential": "openrelayproject"
+        },
+        {
+            "urls": "turn:openrelay.metered.ca:443?transport=tcp", // Added TCP support for mobile
+            "username": "openrelayproject",
+            "credential": "openrelayproject"
         }
     ] 
 };
@@ -45,7 +49,6 @@ export default function VideoMeetComponent() {
     const screenStreamRef = useRef(null);
     const connections = useRef({}); 
     
-    // Check if a username exists in storage to decide whether to show the lobby
     const [username, setUsername] = useState(localStorage.getItem('vc-username') || ""); 
     const [videos, setVideos] = useState([]);
     const [askForUsername, setAskForUsername] = useState(!localStorage.getItem('vc-username'));
@@ -65,14 +68,19 @@ export default function VideoMeetComponent() {
         scrollToBottom();
     }, [messages]);
 
-    // AUTO-REJOIN LOGIC: If we have a username and room URL, join immediately on refresh
     useEffect(() => {
+        // FIX 1: Clear videos on mount to prevent ghost connections
+        setVideos([]);
+
         if (localStorage.getItem('vc-username') && url) {
-            getMedia();
+            // FIX 2: Delay the auto-join by 1 second to prevent m-line mismatch during refresh
+            const timer = setTimeout(() => {
+                getMedia();
+            }, 1000);
+            return () => clearTimeout(timer);
         }
 
         return () => {
-            // Cleanup on tab close/refresh
             if (window.localStream) {
                 window.localStream.getTracks().forEach(track => track.stop());
             }
@@ -101,9 +109,7 @@ export default function VideoMeetComponent() {
     };
 
     const handleEndCall = () => {
-        // CLEAR SESSION ONLY HERE
         localStorage.removeItem('vc-username');
-        
         if (window.localStream) {
             window.localStream.getTracks().forEach(track => track.stop());
         }
@@ -124,7 +130,6 @@ export default function VideoMeetComponent() {
     };
 
     const getMedia = async () => {
-        // Save username to storage before joining
         if (username) {
             localStorage.setItem('vc-username', username);
         }
@@ -136,7 +141,6 @@ export default function VideoMeetComponent() {
             connectToSocketServer();
         } catch (err) { 
             console.error("Media Error:", err);
-            // If media fails (e.g. user denied permission), clear storage so they can try again
             localStorage.removeItem('vc-username');
             setAskForUsername(true);
         }
@@ -161,7 +165,7 @@ export default function VideoMeetComponent() {
                         connections.current[remoteId].createOffer().then(desc => {
                             connections.current[remoteId].setLocalDescription(desc).then(() => {
                                 socketRef.current.emit("signal", remoteId, JSON.stringify({ sdp: connections.current[remoteId].localDescription }));
-                            });
+                            }).catch(e => console.warn("Offer error:", e));
                         });
                     });
                 }
@@ -171,16 +175,21 @@ export default function VideoMeetComponent() {
                 if (!connections.current[fromId]) return; 
                 const signal = JSON.parse(message);
 
-                if (signal.sdp) {
-                    await connections.current[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
-                    if (signal.sdp.type === "offer") {
-                        const desc = await connections.current[fromId].createAnswer();
-                        await connections.current[fromId].setLocalDescription(desc);
-                        socketRef.current.emit("signal", fromId, JSON.stringify({ sdp: connections.current[fromId].localDescription }));
+                // FIX 3: Wrapped in try/catch to ignore mismatched m-line signals during refresh
+                try {
+                    if (signal.sdp) {
+                        await connections.current[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
+                        if (signal.sdp.type === "offer") {
+                            const desc = await connections.current[fromId].createAnswer();
+                            await connections.current[fromId].setLocalDescription(desc);
+                            socketRef.current.emit("signal", fromId, JSON.stringify({ sdp: connections.current[fromId].localDescription }));
+                        }
                     }
-                }
-                if (signal.ice) {
-                    connections.current[fromId].addIceCandidate(new RTCIceCandidate(signal.ice)).catch(e => {});
+                    if (signal.ice) {
+                        await connections.current[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
+                    }
+                } catch (e) {
+                    console.warn("Handshake skipped due to refresh sync:", e);
                 }
             });
 
@@ -211,9 +220,7 @@ export default function VideoMeetComponent() {
         connections.current[id].ontrack = (event) => {
             setVideos(vids => {
                 const alreadyExists = vids.some(v => v.socketId === id);
-                if (alreadyExists) {
-                    return vids.map(v => v.socketId === id ? { ...v, stream: event.streams[0] } : v);
-                }
+                if (alreadyExists) return vids;
                 return [...vids, { socketId: id, stream: event.streams[0], name: name }];
             });
         };
@@ -231,12 +238,10 @@ export default function VideoMeetComponent() {
                 const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
                 screenStreamRef.current = stream;
                 const screenTrack = stream.getVideoTracks()[0];
-                
                 for (let id in connections.current) {
                     const sender = connections.current[id].getSenders().find(s => s.track?.kind === 'video');
                     if (sender) sender.replaceTrack(screenTrack);
                 }
-                
                 localVideoRef.current.srcObject = stream;
                 screenTrack.onended = () => stopScreenShare();
                 setScreenSharing(true);
@@ -287,11 +292,7 @@ export default function VideoMeetComponent() {
                         </div>
                         {videos.map(v => (
                             <div key={v.socketId} className="video-container">
-                                <video 
-                                    ref={el => { if (el && v.stream) el.srcObject = v.stream; }} 
-                                    autoPlay 
-                                    playsInline 
-                                />
+                                <video ref={el => { if (el && v.stream) el.srcObject = v.stream; }} autoPlay playsInline />
                                 <span className="name-overlay">{v.name}</span>
                             </div>
                         ))}

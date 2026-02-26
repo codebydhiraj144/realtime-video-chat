@@ -42,14 +42,19 @@ export const AuthProvider = ({ children }) => {
         } catch (err) { throw err; }
     }
 
-    const addToUserHistory = async (meetingcode) => {
+   const addToUserHistory = async (meetingcode) => {
         try {
-            let request = await client.post("/add_to_activity", {
+            let request = await client.post("/add_to_activity", { // Double check if this should be /add_to_history
                 token: localStorage.getItem("token"),
                 meeting_code: meetingcode
             });
             return request;
-        } catch (e) { throw e; }
+        } catch (e) { 
+            // 💡 WIT TIP: We "catch" the error but don't "throw" it.
+            // This stops the 404 from crashing the Home.js page!
+            console.error("History could not be saved:", e); 
+            return null; 
+        }
     }
 
     // Exported functions and state available to all consumer components

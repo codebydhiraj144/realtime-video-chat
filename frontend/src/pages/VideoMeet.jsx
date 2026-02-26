@@ -16,26 +16,34 @@ import io from 'socket.io-client';
 import { useNavigate, useParams } from 'react-router-dom';
 import "../styles/videoComponent.css";
 
-// Server URL for the Socket.io connection
 const server_url = "https://video-chat-backend-l1qi.onrender.com";
-// Standard Google STUN server configuration to handle NAT traversal
-const peerConfig = { "iceServers": [{ "urls": "stun:stun.l.google.com:19302" }] };
+
+const peerConfig = { 
+    "iceServers": [
+        { 
+            "urls": [
+                "stun:stun.l.google.com:19302",
+                "stun:stun1.l.google.com:19302",
+                "stun:stun2.l.google.com:19302",
+                "stun:stun3.l.google.com:19302",
+                "stun:stun4.l.google.com:19302"
+            ] 
+        }
+    ] 
+};
 
 export default function VideoMeetComponent() {
     const { url } = useParams(); 
     const navigate = useNavigate();
     
-    // Refs for objects that shouldn't trigger re-renders (sockets, peer connections)
     const socketRef = useRef();
     const socketIdRef = useRef();
     const localVideoRef = useRef();
     const messagesEndRef = useRef(null);
     const screenStreamRef = useRef(null);
     
-    // connections stores RTCPeerConnection objects for every participant
     const connections = useRef({}); 
     
-    // Application state
     const [username, setUsername] = useState(""); 
     const [videos, setVideos] = useState([]);
     const [askForUsername, setAskForUsername] = useState(true);
@@ -47,7 +55,6 @@ export default function VideoMeetComponent() {
     const [messages, setMessages] = useState([]);
     const [newMessagesCount, setNewMessagesCount] = useState(0);
 
-    // Auto-scroll logic for chat
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
@@ -56,7 +63,6 @@ export default function VideoMeetComponent() {
         scrollToBottom();
     }, [messages]);
 
-    // UI Handlers for Media
     const handleVideoToggle = () => {
         if (window.localStream) {
             const videoTrack = window.localStream.getVideoTracks()[0];
@@ -77,7 +83,6 @@ export default function VideoMeetComponent() {
         }
     };
 
-    // Cleanup tracks and disconnect socket on call end
     const handleEndCall = () => {
         if (window.localStream) {
             window.localStream.getTracks().forEach(track => track.stop());
@@ -98,7 +103,6 @@ export default function VideoMeetComponent() {
         }
     };
 
-    // Request permissions and initialize local camera/mic
     const getMedia = async () => {
         setAskForUsername(false);
         try {
@@ -109,7 +113,6 @@ export default function VideoMeetComponent() {
         } catch (err) { console.error("Media Error:", err); }
     };
 
-    // Socket.io Signaling logic
     const connectToSocketServer = () => {
         socketRef.current = io.connect(server_url);
         
@@ -117,25 +120,26 @@ export default function VideoMeetComponent() {
             socketIdRef.current = socketRef.current.id;
             socketRef.current.emit("join-call", url, username);
 
-            // Triggered when a new user enters the room
             socketRef.current.on("user-joined", (id, clients) => {
+                // Initialize a peer connection for EVERY client in the room
                 clients.forEach((client) => {
                     if (!connections.current[client.socketId] && client.socketId !== socketIdRef.current) {
                         initializePeer(client.socketId, client.name);
                     }
                 });
 
-                // Create and send WebRTC offer to the new user
-                if (id !== socketIdRef.current) {
-                    connections.current[id].createOffer().then(desc => {
-                        connections.current[id].setLocalDescription(desc).then(() => {
-                            socketRef.current.emit("signal", id, JSON.stringify({ sdp: connections.current[id].localDescription }));
+                // Logic for Mesh Network: The newly joined user initiates the offer to all existing peers
+                if (id === socketIdRef.current) {
+                    Object.keys(connections.current).forEach(remoteId => {
+                        connections.current[remoteId].createOffer().then(desc => {
+                            connections.current[remoteId].setLocalDescription(desc).then(() => {
+                                socketRef.current.emit("signal", remoteId, JSON.stringify({ sdp: connections.current[remoteId].localDescription }));
+                            });
                         });
                     });
                 }
             });
 
-            // Handle incoming WebRTC signals (Offer, Answer, ICE Candidates)
             socketRef.current.on('signal', async (fromId, message) => {
                 if (!connections.current[fromId]) return; 
                 const signal = JSON.parse(message);
@@ -168,26 +172,26 @@ export default function VideoMeetComponent() {
         });
     };
 
-    // Logic to set up individual RTCPeerConnections
     const initializePeer = (id, name) => {
         connections.current[id] = new RTCPeerConnection(peerConfig);
 
-        // Send network info (ICE) to peer
         connections.current[id].onicecandidate = (e) => {
             if (e.candidate) {
                 socketRef.current.emit("signal", id, JSON.stringify({ ice: e.candidate }));
             }
         };
 
-        // When remote media track is received, add to UI state
         connections.current[id].ontrack = (event) => {
             setVideos(vids => {
-                const filtered = vids.filter(v => v.socketId !== id);
-                return [...filtered, { socketId: id, stream: event.streams[0], name: name }];
+                // Check if this user's video box already exists to avoid duplicates
+                const alreadyExists = vids.some(v => v.socketId === id);
+                if (alreadyExists) {
+                    return vids.map(v => v.socketId === id ? { ...v, stream: event.streams[0] } : v);
+                }
+                return [...vids, { socketId: id, stream: event.streams[0], name: name }];
             });
         };
 
-        // Attach local tracks to the connection
         if (window.localStream) {
             window.localStream.getTracks().forEach(track => {
                 connections.current[id].addTrack(track, window.localStream);
@@ -195,7 +199,6 @@ export default function VideoMeetComponent() {
         }
     };
 
-    // Screen sharing logic using getDisplayMedia
     const handleScreenShare = async () => {
         try {
             if (!screenSharing) {
@@ -203,7 +206,6 @@ export default function VideoMeetComponent() {
                 screenStreamRef.current = stream;
                 const screenTrack = stream.getVideoTracks()[0];
                 
-                // Swap the video track for all active peer connections
                 for (let id in connections.current) {
                     const sender = connections.current[id].getSenders().find(s => s.track?.kind === 'video');
                     if (sender) sender.replaceTrack(screenTrack);
@@ -221,7 +223,6 @@ export default function VideoMeetComponent() {
     const stopScreenShare = () => {
         screenStreamRef.current?.getTracks().forEach(track => track.stop());
         const videoTrack = window.localStream.getVideoTracks()[0];
-        // Revert to camera track for all peers
         for (let id in connections.current) {
             const sender = connections.current[id].getSenders().find(s => s.track?.kind === 'video');
             if (sender) sender.replaceTrack(videoTrack);
@@ -241,7 +242,6 @@ export default function VideoMeetComponent() {
 
     return (
         <div className="video-meet-wrapper">
-            {/* Lobby UI: Get Username before joining */}
             {askForUsername ? (
                 <div className="lobby">
                     <img src="/logo4.png" alt="logo" style={{ maxWidth: '500px', marginBottom: '20px' }} />
@@ -254,7 +254,6 @@ export default function VideoMeetComponent() {
                 </div>
             ) : (
                 <>
-                    {/* Meeting UI: Video Grid */}
                     <div className="video-grid">
                         <div className="video-container">
                             <video ref={localVideoRef} autoPlay muted playsInline />
@@ -264,14 +263,14 @@ export default function VideoMeetComponent() {
                             <div key={v.socketId} className="video-container">
                                 <video 
                                     ref={el => { if (el && v.stream) el.srcObject = v.stream; }} 
-                                    autoPlay playsInline 
+                                    autoPlay 
+                                    playsInline 
                                 />
                                 <span className="name-overlay">{v.name}</span>
                             </div>
                         ))}
                     </div>
 
-                    {/* Chat Sidebar Overlay */}
                     {showChat && (
                         <Paper className="chat-window">
                             <div className="chat-header">
@@ -294,7 +293,6 @@ export default function VideoMeetComponent() {
                         </Paper>
                     )}
 
-                    {/* Bottom Control Bar */}
                     <div className="button-container">
                         <IconButton onClick={handleAudioToggle} className="control-btn">
                             {audioEnabled ? <MicIcon style={{color: "white"}} /> : <MicOffIcon style={{color: "#ea4335"}} />}

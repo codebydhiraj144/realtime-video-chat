@@ -31,7 +31,7 @@ const peerConfig = {
             "credential": "openrelayproject"
         },
         {
-            "urls": "turn:openrelay.metered.ca:443?transport=tcp", // Added TCP support for mobile
+            "urls": "turn:openrelay.metered.ca:443?transport=tcp", 
             "username": "openrelayproject",
             "credential": "openrelayproject"
         }
@@ -51,7 +51,7 @@ export default function VideoMeetComponent() {
     
     const [username, setUsername] = useState(localStorage.getItem('vc-username') || ""); 
     const [videos, setVideos] = useState([]);
-    const [askForUsername, setAskForUsername] = useState(!localStorage.getItem('vc-username'));
+    const [askForUsername, setAskForUsername] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [screenSharing, setScreenSharing] = useState(false);
@@ -59,6 +59,14 @@ export default function VideoMeetComponent() {
     const [message, setMessage] = useState("");
     const [messages, setMessages] = useState([]);
     const [newMessagesCount, setNewMessagesCount] = useState(0);
+    const [isJoining, setIsJoining] = useState(false);
+
+    // FIX: Ensure video element gets the stream after the lobby disappears
+    useEffect(() => {
+        if (!askForUsername && localVideoRef.current && window.localStream) {
+            localVideoRef.current.srcObject = window.localStream;
+        }
+    }, [askForUsername]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -69,17 +77,7 @@ export default function VideoMeetComponent() {
     }, [messages]);
 
     useEffect(() => {
-        // FIX 1: Clear videos on mount to prevent ghost connections
         setVideos([]);
-
-        if (localStorage.getItem('vc-username') && url) {
-            // FIX 2: Delay the auto-join by 1 second to prevent m-line mismatch during refresh
-            const timer = setTimeout(() => {
-                getMedia();
-            }, 1000);
-            return () => clearTimeout(timer);
-        }
-
         return () => {
             if (window.localStream) {
                 window.localStream.getTracks().forEach(track => track.stop());
@@ -130,19 +128,27 @@ export default function VideoMeetComponent() {
     };
 
     const getMedia = async () => {
+        if (isJoining) return; 
+        setIsJoining(true);
+
         if (username) {
             localStorage.setItem('vc-username', username);
         }
-        setAskForUsername(false);
+
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user" }, 
+                audio: true 
+            });
+            
             window.localStream = stream;
-            if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+            // First connect, then hide lobby
             connectToSocketServer();
+            setAskForUsername(false); 
         } catch (err) { 
             console.error("Media Error:", err);
-            localStorage.removeItem('vc-username');
-            setAskForUsername(true);
+            setIsJoining(false);
+            alert("Camera access failed. Please check permissions.");
         }
     };
 
@@ -175,7 +181,6 @@ export default function VideoMeetComponent() {
                 if (!connections.current[fromId]) return; 
                 const signal = JSON.parse(message);
 
-                // FIX 3: Wrapped in try/catch to ignore mismatched m-line signals during refresh
                 try {
                     if (signal.sdp) {
                         await connections.current[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp));
@@ -189,7 +194,7 @@ export default function VideoMeetComponent() {
                         await connections.current[fromId].addIceCandidate(new RTCIceCandidate(signal.ice));
                     }
                 } catch (e) {
-                    console.warn("Handshake skipped due to refresh sync:", e);
+                    console.warn("Handshake skipped:", e);
                 }
             });
 
@@ -281,7 +286,9 @@ export default function VideoMeetComponent() {
                     <div style={{ margin: '20px 0' }}>
                         <TextField label="Your Name" value={username} onChange={e => setUsername(e.target.value)} fullWidth />
                     </div>
-                    <Button variant="contained" onClick={getMedia} disabled={!username.trim()}>JOIN CALL</Button>
+                    <Button variant="contained" onClick={getMedia} disabled={!username.trim() || isJoining}>
+                        {isJoining ? "CONNECTING..." : "JOIN CALL"}
+                    </Button>
                 </div>
             ) : (
                 <>

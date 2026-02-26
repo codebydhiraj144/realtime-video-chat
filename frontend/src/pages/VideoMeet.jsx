@@ -61,7 +61,6 @@ export default function VideoMeetComponent() {
     const [newMessagesCount, setNewMessagesCount] = useState(0);
     const [isJoining, setIsJoining] = useState(false);
 
-    // FIX: Ensure video element gets the stream after the lobby disappears
     useEffect(() => {
         if (!askForUsername && localVideoRef.current && window.localStream) {
             localVideoRef.current.srcObject = window.localStream;
@@ -135,20 +134,29 @@ export default function VideoMeetComponent() {
             localStorage.setItem('vc-username', username);
         }
 
+        // CLEANUP: Stop any existing streams before starting a new request
+        // This is the primary fix for "Camera access failed" errors
+        if (window.localStream) {
+            window.localStream.getTracks().forEach(track => track.stop());
+        }
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user" }, 
+                video: { 
+                    facingMode: "user",
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }, 
                 audio: true 
             });
             
             window.localStream = stream;
-            // First connect, then hide lobby
             connectToSocketServer();
             setAskForUsername(false); 
         } catch (err) { 
             console.error("Media Error:", err);
-            setIsJoining(false);
-            alert("Camera access failed. Please check permissions.");
+            setIsJoining(false); // Reset joining state so user can try again
+            alert("Camera access failed. Please ensure no other apps are using the camera and you have granted browser permissions.");
         }
     };
 

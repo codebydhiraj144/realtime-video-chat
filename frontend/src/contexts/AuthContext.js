@@ -8,7 +8,7 @@ export const AuthContext = createContext({});
 
 // Axios instance for centralized API configuration
 const client = axios.create({
-    baseURL: "http://localhost:8000/api/v1/users" 
+   baseURL: "https://video-chat-backend-l1qi.onrender.com/api/v1/users"
 });
 
 export const AuthProvider = ({ children }) => {

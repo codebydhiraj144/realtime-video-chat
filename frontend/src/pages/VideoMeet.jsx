@@ -17,7 +17,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import "../styles/videoComponent.css";
 
 // Server URL for the Socket.io connection
-const server_url = "http://localhost:8000";
+const server_url = "https://video-chat-backend-l1qi.onrender.com";
 // Standard Google STUN server configuration to handle NAT traversal
 const peerConfig = { "iceServers": [{ "urls": "stun:stun.l.google.com:19302" }] };
 

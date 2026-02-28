@@ -16,25 +16,26 @@ import { useNavigate, useParams } from 'react-router-dom';
 import "../styles/videoComponent.css";
 
 const server_url = "https://video-chat-backend-l1qi.onrender.com";
-const peerConfig = { 
-    "iceServers": [
-        { "urls": "stun:stun.l.google.com:19302" },
+const peerConfig = {
+    iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
         {
-            "urls": "turn:global.relay.metered.ca:80",
-            "username": process.env.REACT_APP_METERED_USER, 
-            "credential": process.env.REACT_APP_METERED_SECRET
+            urls: "turn:staticauth.openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayprojectsecret" // "secret" must be at the end
         },
         {
-            "urls": "turn:global.relay.metered.ca:443",
-            "username": process.env.REACT_APP_METERED_USER,
-            "credential": process.env.REACT_APP_METERED_SECRET
+            urls: "turn:staticauth.openrelay.metered.ca:443",
+            username: "openrelayproject",
+            credential: "openrelayprojectsecret"
         },
         {
-            "urls": "turn:global.relay.metered.ca:443?transport=tcp", 
-            "username": process.env.REACT_APP_METERED_USER,
-            "credential": process.env.REACT_APP_METERED_SECRET
+            urls: "turn:staticauth.openrelay.metered.ca:443?transport=tcp",
+            username: "openrelayproject",
+            credential: "openrelayprojectsecret"
         }
-    ] 
+    ]
 };
 
 export default function VideoMeetComponent() {
